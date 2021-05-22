@@ -1,7 +1,7 @@
 import sys, os, importlib
 import asyncio
 from twitchio.ext  import commands
-#https://twitchio.readthedocs.io/en/rewrite/index.html
+#https://twitchio.readthedocs.io/en/latest/
 
 import random
 from itertools import chain
@@ -12,16 +12,15 @@ from dateutil import parser, relativedelta
 from dateutil.relativedelta import relativedelta
 from dataclasses import dataclass
 
-
 import MBSQLModule as SQL
 
 #THIS IS FOR THE TTYD GAME INTEGRATION, IT ADDS THE FOLLOWING FOLDER TO THE PATH FOR IMPORTING FILES
 sys.path.insert(0, 'C:/Users/Nolan/Desktop/ManiacalBot/TwitchPlaysCode/TwitchChatIntegration')
 
-#TESTING NEW INPUT MODE
-import InputDataClasses
+import ChatControlHandler
+import PollManager
 
-ChannelInfo = namedtuple('ChannelInfo', ('broadcaster_language', 'user_name', 'displayed_name', 'game_id', 'id', 'is_live', 'tag_ids', 'thumbnail_url', 'title', 'started_at'))
+ChannelInfo = namedtuple('ChannelInfo', ('broadcaster_language', 'broadcaster_login', 'display_name', 'game_id', 'game_name', 'id', 'is_live', 'tag_ids', 'thumbnail_url', 'title', 'started_at'))
 
 import time
 import threading
@@ -113,7 +112,7 @@ import ctypes
 
 
 
-KeycodeGames = {"TTYD", "Pokemon", "test", "Valheim"}
+KeycodeGames = {"TTYD", "Pokemon", "Valheim"}
 
 #The input method used for the chat integration, such as using the KeyCodeInput class
 Input = None
@@ -122,8 +121,8 @@ GameInputData = None
 
 class ManiacalBot(commands.Bot):
     
-    bIntegrationMode = ctypes.c_bool(False)
-    GameTitle = "NONE"
+    PollMan = None
+    ChatHandler = None
     Intel_Users = [[],[],[],[],[]]
     currentIntelGroupIndex = 0
     IntelGroupMax = 5
@@ -166,16 +165,14 @@ class ManiacalBot(commands.Bot):
         await self.LoadAddedCommands()
         data = await self.get_channels_by_name(self.initial_channels)
         for channel in data:
-            print(channel.values())
-            self.channeldata[channel['display_name']] = ChannelInfo(*channel.values())
+            """print(channel.keys())    for when they change the twitch API on me
+            print(channel.values())"""
+            self.channeldata[channel['broadcaster_login']] = ChannelInfo(*channel.values())
         ws = self._ws
         asyncio.ensure_future(self.AwardIntel())
         asyncio.ensure_future(self.PeriodicMessages())
 
         await ws.send_privmsg(os.environ['CHANNEL'], f"/me BOT ONLINE")
-
-    async def ToggleIntegration(self):
-        self.bIntegrationMode = ctypes.c_bool(not bIntegrationMode)
 
     async def PeriodicMessages(self):
         while True:
@@ -199,7 +196,9 @@ class ManiacalBot(commands.Bot):
                 await ctx.channel.clear()
         
 
-        if self.bIntegrationMode: await self.HandleIntegration(ctx)
+        if self.ChatHandler is not None: await self.ChatHandler.HandleIntegration(ctx)
+
+        if self.PollManager is not None: await self.PollManager.HandleVote(ctx)
 
         await self.handle_commands(ctx)
         
@@ -218,91 +217,15 @@ class ManiacalBot(commands.Bot):
         UserData = (await self.http.get_users(user.name))[0]
         await self.DeactivateIntelUser(int(UserData['id']))
 
-    async def HandleIntegration(self, ctx):
-        message = ctx.content.strip(' ').lower()
-
-        if self.GameTitle == "test":
-            if message == "look left":
-                await SendTestMouseInput(-480,0)
-            elif message == "look right":
-                await SendTestMouseInput(480,0)
-            elif len(message) == 1 or message in pyautogui.KEYBOARD_KEYS:
-                await SendTestKeyInput(message)
-            elif message == "space":
-                await SendKeyInputDuration(' ', 1)
-            elif message == "click":
-                await SendTestMouseClick()
-            elif message == "swap":
-                await SendMouseButtonSwap()
-            elif message == "info":
-                await PrintMouseInfo()
-
-        elif(self.GameTitle == "BeatBars"):
-            if message == 'up' or message == 'north':
-                self.chat_data[ctx.author.name] = 'north'
-            elif message == 'down' or message == 'south':
-                self.chat_data[ctx.author.name] = 'south'
-            elif message == 'right' or message == 'east':
-                self.chat_data[ctx.author.name] = 'east'
-            elif message == 'left' or message == 'west':
-                self.chat_data[ctx.author.name] = 'west'
-
-        else:
-            if message in GameInputData.keywords:
-                InputData = GameInputData.keywords[message]
-                await SendKeyInputDuration(Key = InputData.button, duration = InputData.duration)
-            else:
-                try:
-                    if GameInputData.GameInfo.MouseControlsEnabled:
-                        if message in GameInputData.MouseControlData.keywords:
-                            MouseData = GameInputData.MouseControlData.keywords[message]
-                            await self.HandleMouseInput(MouseData)
-                        else:
-                            try:
-                                if message in GameInputData.InputChords.keywords:
-                                    for item in GameInputData.InputChords.keywords[message]:
-                                        if item.__class__ is InputDataClasses.MouseData:
-                                            loop = asyncio.get_event_loop()
-                                            loop.create_task(self.HandleMouseInput(item))
-                                        elif item.__class__ is InputDataClasses.ButtonData:
-                                            loop = asyncio.get_event_loop()
-                                            loop.create_task(SendKeyInputDuration(Key = item.button, duration = item.duration))
-                                        else:
-                                            print(item.__class__)
-                            except Exception as e:
-                                print(e)
-                                pass
-                except Exception as e:
-                    print(e)
-                    pass
-        
-        if len(self.chat_data) > 0:
-            await self.Print_Chat_Data()
-            return
-
-
-    async def HandleMouseInput(self, MouseData):
-            if MouseData.inputType == 'BUTTON':
-                await SendMouseClick(MouseData.button, MouseData.duration)
-            elif MouseData.inputType == 'MOVEMENT':
-                await SendMouseMoveInput(MouseData.xMovement, MouseData.yMovement,MouseData.duration)    
-            elif MouseData.inputType == 'SWAP':
-                await SendMouseButtonSwap(MouseData.duration)
-
     async def EnableChatReading(self, title):
-        self.bIntegrationMode = ctypes.c_bool(True)
-        self.GameTitle = title
-        if (title in KeycodeGames):
-            await ImportKeyCodeData(title)
+        if self.ChatHandler is None:
+            self.ChatHandler = await ChatControlHandler.ChatControlHandler.create(title)
+        else:
+            await self.ChatHandler.ImportGame(title)
             
 
     async def DisableChatReading(self):
-        self.bIntegrationMode = ctypes.c_bool(False)
-        self.GameTitle="NONE"
-        global Input, GameInputData
-        Input.RevertMouseButton()
-        Input = None
-        GameInputData = None
+        await self.ChatHandler.disablehandler()
 
 #Commands
 #region Commands
@@ -317,6 +240,45 @@ class ManiacalBot(commands.Bot):
         finally:
             if (output is not 'didntwork' and output is not None):
                 await ctx.send(f'{output}')
+                
+    
+    @commands.command(name = "poll")
+    async def pollCommand(self, ctx, *args):
+        if(ctx.author.is_mod):
+            pollTime = int(args[0])
+            if(pollTime > 0):
+                PollText = ' '.join(args[1:])
+                PollOptions = PollText.split('|')
+                if len(PollOptions) > 1:
+                    self.PollMan = PollManager.CreatePoll(pollTime, PollOptions)
+                    event_loop = asyncio.get_event_loop()
+                    event_loop.create_task(self.HandleChatPollResults(ctx.channel))
+
+    async def HandleChatPollResults(self, channel):
+        if self.PollMan is not None:
+            pollresult = await self.PollMan.GetResults()
+            self._ws.send_privmsg(channel, "The poll has finished! The winning option was: " + pollresult)
+
+    @commands.command(name="keywords")
+    async def KeywordsCommand(self, ctx):
+        if self.ChatHandler is not None:
+            messages = []
+            keywords = await self.ChatHandler.GetKeywords()
+            currentMessage = "The current chat control keywords are "
+            for keyword in keywords:
+                if ((len(currentMessage) + len(keyword) + 2) > 500):
+                    messages.append(currentMessage)
+                    currentMessage = ""
+                elif (keywords.index(keyword) != 0):
+                        currentMessage += ", "
+                if (keywords.index(keyword) == len(keywords) - 1):
+                    if len(currentMessage) < 498:
+                        currentMessage += "& "
+                currentMessage += keyword
+            messages.append(currentMessage)
+            for message in messages:
+                await ctx.send(message)
+
 
 #AddedChatCommands
 #region AddedChatCommands
@@ -332,7 +294,6 @@ class ManiacalBot(commands.Bot):
                 await ctx.send(f'command "{commandName}" added successfully')
             else: await ctx.send(f'command {commandName} already exists. Try using !editcom instead')
 
-    
 
     @commands.command(name="editcom")
     async def EditTempCommand(self, ctx, *args):
@@ -626,75 +587,6 @@ class ManiacalBot(commands.Bot):
            data = await ws._http.request('GET', '/search/channels', params=[('query', name)], limit=1)
            channels.append(data.pop(0))
         return channels
-
-
-async def ImportKeyCodeData(title):
-    modulename = "KeyCodeInput"
-    global Input, GameInputData
-    if modulename not in sys.modules:
-        spec = importlib.util.find_spec(modulename)
-        if spec is not None:
-            Input = importlib.import_module(modulename)
-    else:
-        Input = sys.modules[modulename]
-
-
-    GameData = title + "GameData"
-    if GameData not in sys.modules:
-        spec = importlib.util.find_spec(GameData)
-        if spec is not None:
-            GameInputData = importlib.import_module(GameData)
-    else:
-        GameInputData = sys.modules[GameData]
-
-async def SendKeyInput(Key):
-    try:
-        Input.PressKey(Key)
-        await asyncio.sleep(.01)
-        Input.ReleaseKey(Key)
-    except e:
-        print(e)
-
-async def SendKeyInputDuration(Key, duration):
-    try:
-        Input.PressKey(Key)
-        await asyncio.sleep(duration)
-        Input.ReleaseKey(Key)
-    except e:
-        print(e)
-
-
-async def SendTestKeyInput(Key):
-    pyautogui.press(Key)
-
-
-async def SendTestKeyInputDuration(Key, duration):
-    pyautogui.keyDown(Key)
-    await asyncio.sleep(duration)
-    pyautogui.keyUp(Key)
-
-
-@rate_limited(2,mode='kill')
-async def SendMouseMoveInput(X,Y,duration):
-    #pyautogui.moveTo(X,Y,.5,pyautogui.easeOutQuad)
-    #Input.set_pos(X,Y)
-    Input.move_mouse_relative(X,Y,duration)
-
-async def SendMouseClick(button, duration):
-    #pydirectinput.click()
-    #pydirectinput.press('esc')
-    #await SendKeyInput(0x100)
-    Input.click(button, duration)
-
-@rate_limited(10, mode='kill')
-async def SendMouseButtonSwap(duration):
-    Input.SwapMouseButton()
-    await asyncio.sleep(duration)
-    Input.RevertMouseButton()
-
-
-async def PrintMouseInfo():
-    Input.GetInfo()
 
 if __name__ == "__main__":
     bot = ManiacalBot()

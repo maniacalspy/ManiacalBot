@@ -1,0 +1,27 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30320.27
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "ManiacalBot", "ManiacalBot.pyproj", "{D495D229-B516-48E1-8107-730C31668F08}"
+EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "TwitchChatIntegration", "..\TwitchPlaysCode\TwitchChatIntegration\TwitchChatIntegration.pyproj", "{2F024525-6CC3-447B-A846-F4CA9DC80874}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D495D229-B516-48E1-8107-730C31668F08}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D495D229-B516-48E1-8107-730C31668F08}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2F024525-6CC3-447B-A846-F4CA9DC80874}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2F024525-6CC3-447B-A846-F4CA9DC80874}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6FF05AC8-3043-426B-A0F2-7DF0A3FDDDE6}
+	EndGlobalSection
+EndGlobal
