@@ -18,7 +18,7 @@ import MBSQLModule as SQL
 sys.path.insert(0, 'C:/Users/Nolan/Desktop/ManiacalBot/TwitchPlaysCode/TwitchChatIntegration')
 
 import ChatControlHandler
-import PollManager
+from PollManager import PollManager
 
 ChannelInfo = namedtuple('ChannelInfo', ('broadcaster_language', 'broadcaster_login', 'display_name', 'game_id', 'game_name', 'id', 'is_live', 'tag_ids', 'thumbnail_url', 'title', 'started_at'))
 
@@ -198,7 +198,7 @@ class ManiacalBot(commands.Bot):
 
         if self.ChatHandler is not None: await self.ChatHandler.HandleIntegration(ctx)
 
-        if self.PollManager is not None: await self.PollManager.HandleVote(ctx)
+        if self.PollMan is not None and ctx.content.isnumeric(): await self.PollMan.HandleVote(ctx)
 
         await self.handle_commands(ctx)
         
@@ -245,19 +245,30 @@ class ManiacalBot(commands.Bot):
     @commands.command(name = "poll")
     async def pollCommand(self, ctx, *args):
         if(ctx.author.is_mod):
-            pollTime = int(args[0])
-            if(pollTime > 0):
-                PollText = ' '.join(args[1:])
-                PollOptions = PollText.split('|')
-                if len(PollOptions) > 1:
-                    self.PollMan = PollManager.CreatePoll(pollTime, PollOptions)
-                    event_loop = asyncio.get_event_loop()
-                    event_loop.create_task(self.HandleChatPollResults(ctx.channel))
+            if self.PollMan is None:
+                pollTime = int(args[0])
+                if(pollTime > 0):
+                    PollText = ' '.join(args[1:])
+                    PollOptions = [option.strip() for option in PollText.split('|')]
+                    for option in PollOptions:
+                        option = option.strip()
+                    PollPrompt = PollOptions[0]
+                    del PollOptions[0]
+                    if len(PollOptions) > 1:
+                        self.PollMan = await PollManager.CreatePoll(pollTime, PollOptions)
+                        event_loop = asyncio.get_event_loop()
+                        event_loop.create_task(self.HandleChatPollResults(ctx.channel))
+                        if self.PollMan is not None:
+                            ResponseMessage = f'The Poll "{PollPrompt}" has started. The options are: 1) {PollOptions[0]}'
+                            for i in range(1, len(PollOptions)):
+                                ResponseMessage += f", {i+1}) {PollOptions[i]}"
+                            await ctx.send(ResponseMessage)
 
     async def HandleChatPollResults(self, channel):
         if self.PollMan is not None:
-            pollresult = await self.PollMan.GetResults()
-            self._ws.send_privmsg(channel, "The poll has finished! The winning option was: " + pollresult)
+            pollresult =  await self.PollMan.GetResults()
+            await self._ws.send_privmsg(channel.name, f"The poll has finished! The winning option was: {pollresult}")
+            del self.PollMan
 
     @commands.command(name="keywords")
     async def KeywordsCommand(self, ctx):
