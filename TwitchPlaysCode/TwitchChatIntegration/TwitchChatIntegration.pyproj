@@ -43,6 +43,9 @@
     <Compile Include="KeyCodeInput.py" />
     <Compile Include="PokemonGameData.py" />
     <Compile Include="RetroarchControlData.py" />
+    <Compile Include="RoR2GameData.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="TestGameData.py">
       <SubType>Code</SubType>
     </Compile>

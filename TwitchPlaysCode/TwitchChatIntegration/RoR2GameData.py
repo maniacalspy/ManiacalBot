@@ -17,13 +17,19 @@ class RoR2GameData(GameInputBase.GameInputBase):
     """description of class"""
     def __init__(self):
         self.socketKeywords = {
-            "whiteitem" : "spawntest",
-            "greenitem" : "spawntwo",
-            "reditem" : "spawnthree",
+            "whiteitem" : "spawnwhite",
+            "greenitem" : "spawngreen",
+            "reditem" : "spawnred",
             "blueitem" : "spawnlunar",
             "anyitem" : "spawnany",
             "equipment" : "spawnequip",
-            "yoink" : "removeitem"
+            "yoink" : "removeitem",
+            "slow" : "applyslow",
+            "weak" : "applyweak",
+            "overheat" : "applyoverheat",
+            "hobble" : "applyhobble",
+            "takemoney" : "takemoney"
+            #,"test" : "testcommand"
             }
         self.mysock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.mysock.connect((HOST, PORT))
