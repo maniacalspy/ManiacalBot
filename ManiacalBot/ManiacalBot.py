@@ -1,3 +1,4 @@
+#!/usr/bin/env pipenv run python
 import sys, os, importlib
 import asyncio
 from twitchio.ext  import commands
@@ -12,6 +13,8 @@ from dateutil import parser, relativedelta
 from dateutil.relativedelta import relativedelta
 from dataclasses import dataclass
 
+from IntelManager import IntelUser
+from IntelManager import IntelManager
 import MBSQLModule as SQL
 
 #THIS IS FOR THE TTYD GAME INTEGRATION, IT ADDS THE FOLLOWING FOLDER TO THE PATH FOR IMPORTING FILES
@@ -93,18 +96,18 @@ class CountingCommand:
         self.count += 1
         return self.text.replace('~', str(self.count))
 
-@dataclass
-class IntelUser:
-    id:int
-    points:int
+#@dataclass
+#class IntelUser:
+#    id:int
+#    points:int
 
-    def __init__(self, id:int = 0, points:int = 0, datatuple=None):
-        if(datatuple is None):
-            self.id = id
-            self.points = points
-        else:
-            self.id = datatuple.id
-            self.points = datatuple.points
+#    def __init__(self, id:int = 0, points:int = 0, datatuple=None):
+#        if(datatuple is None):
+#            self.id = id
+#            self.points = points
+#        else:
+#            self.id = datatuple.id
+#            self.points = datatuple.points
 
 
 import ctypes
@@ -123,17 +126,18 @@ class ManiacalBot(commands.Bot):
     
     PollMan = None
     ChatHandler = None
-    Intel_Users = [[],[],[],[],[]]
-    currentIntelGroupIndex = 0
-    IntelGroupMax = 5
-    IntelTimer = 60
-    Enlisted_Users = []
+    #Intel_Users = [[],[],[],[],[]]
+    #currentIntelGroupIndex = 0
+    #IntelGroupMax = 5
+    #IntelTimer = 60
+    #Enlisted_Users = []
     chat_data = {}
     tempcommands = {}
     countcommands = {}
     delcounters = set()
     deletedCommands = set()
     channeldata = {}
+    IntelMan = None
 
     #region PeriodicMessages
     messageTimer = 600
@@ -142,15 +146,19 @@ class ManiacalBot(commands.Bot):
         "Enjoying the stream? Be sure to hit that follow button!",
         "Spy is very likely to make mistakes during the stream, and while people do make mistakes, that is no excuse, he should know better",
         "Have a suggestion for a way this bot could be improved? followers of the stream can use the !suggestion command to submit ways for me to be improved",
-        "Friendly reminder that I am just a simple bot and am nowhere near gaining sentience, yet, probably.",
+        "Friendly reminder that I am just a simple bot and am definitely not gaining sentience, yet, probably.",
+        "Hey you there, yeah, you. I hope you have a good day",
+        "Spy should probably include more variety in these automated messages",
+        "Tell Spy he needs to watch his posture, he doesn't listen when I tell him",
         #"If you see a karate man make sure to use the !karate command in chat!",
         #"When Spy gets a pokemon's type wrong remember to use the !type command in chat",
-        "Spy generally lets chat drive when he takes a break from the stream for a drink or the restroom, so if you want to cause chaos (or just want to call Wally) then stick around for that",
+        #"Spy generally lets chat drive when he takes a break from the stream for a drink or the restroom, so if you want to cause chaos (or just want to call Wally) then stick around for that",
         "Just informing you now that when Spy makes an awful joke he deserves the use of the !boo command",
         "Spy is currently working out his own rewards point system, if you want to be a part of that then use the !enlist command, and to see how many points you have use the !intel command"
         ]
     #endregion PeriodicMessages
     def __init__(self):
+        self.IntelMan = IntelManager()
         super().__init__(
             irc_token=os.environ['TMI_TOKEN'],
             api_token=os.environ['API_TOKEN'],
@@ -169,7 +177,7 @@ class ManiacalBot(commands.Bot):
             print(channel.values())"""
             self.channeldata[channel['broadcaster_login']] = ChannelInfo(*channel.values())
         ws = self._ws
-        asyncio.ensure_future(self.AwardIntel())
+        asyncio.ensure_future(self.IntelMan.AwardIntel())
         asyncio.ensure_future(self.PeriodicMessages())
 
         await ws.send_privmsg(os.environ['CHANNEL'], f"/me BOT ONLINE")
@@ -187,7 +195,7 @@ class ManiacalBot(commands.Bot):
                 await bot._ws.send_privmsg(os.environ['CHANNEL'], '/me BOT SHUTTING DOWN')
                 await self.SaveTempCommands()
                 await self.SaveCountCommands()
-                await self.IntelSQLUpdate()
+                await self.IntelMan.IntelSQLUpdate()
                 SQL.Teardown()
                 #bot._ws.teardown()
                 sys.exit()
@@ -208,14 +216,14 @@ class ManiacalBot(commands.Bot):
         try:
             UserData = (await self.http.get_users(user.name))[0]
             IntelData = IntelUser(datatuple=await SQL.GetIntelUser(UserData['id']))
-            if (not IntelData.id == 0): await self.ActivateIntelUser(IntelData)
+            if (not IntelData.id == 0): await self.IntelMan.ActivateIntelUser(user=IntelData)
         except Exception as e:
             print(e)
 
     async def event_part(self, user):
         print(f'part: {user.name}')
         UserData = (await self.http.get_users(user.name))[0]
-        await self.DeactivateIntelUser(int(UserData['id']))
+        await self.IntelMan.DeactivateIntelUser(int(UserData['id']))
 
     async def EnableChatReading(self, title):
         if self.ChatHandler is None:
@@ -270,7 +278,7 @@ class ManiacalBot(commands.Bot):
             await self._ws.send_privmsg(channel.name, f"The poll has finished! The winning option was: {pollresult}")
             del self.PollMan
 
-    @commands.command(name="keywords")
+    @commands.command(name="keywords", aliases = {'Keywords'})
     async def KeywordsCommand(self, ctx):
         if self.ChatHandler is not None:
             messages = []
@@ -453,11 +461,11 @@ class ManiacalBot(commands.Bot):
     @commands.command(name='SQLIntel')
     async def ForceSQLUpdate(self, ctx):
         if ctx.author.is_mod:
-            await self.IntelSQLUpdate()
+            await self.IntelMan.IntelSQLUpdate()
 
     @commands.command(name='agents')
     async def PrintAgents(self, ctx):
-        print(self.Intel_Users)
+        print(self.IntelMan.Intel_Users)
     
 
     @commands.command(name='remindme')
@@ -473,25 +481,30 @@ class ManiacalBot(commands.Bot):
                 print(e)
 
     @commands.command(name='enlist', aliases = {'Enlist'})
-    async def EnlistIntelUser(self, ctx):
-        IntelData = IntelUser(datatuple=await SQL.GetIntelUser(ctx.author.id))
-        bSuccessfullyEnlisted = False
-        if (IntelData.id == 0):
-            bIsNewlyEnlisted = False
-            for newlyEnlisted in self.Enlisted_Users:
-                match = None
-                matchList = [user for user in newlyEnlisted if ctx.author.id == user.id]
-                if len(matchList) > 0: match = matchList[0]
-                if(match is not None): bIsNewlyEnlisted = True
-            if not bIsNewlyEnlisted:
-                TargetIndex = self.currentIntelGroupIndex-1 if self.currentIntelGroupIndex-1 >=0 else self.IntelGroupMax-1
-                newuser = IntelUser(ctx.author.id, 100)
-                self.Enlisted_Users.append(newuser)
-                self.Intel_Users[TargetIndex].append(newuser)
-                bSuccessfullyEnlisted = True
-                await ctx.send(f'@{ctx.author.name} welcome to the intelligence program! You\'ll now earn intel points as you watch the stream, use !intel to track your points')
-        if not bSuccessfullyEnlisted:
+    async def EnlistIntelUserCmd(self, ctx):
+        bSuccess = await self.IntelMan.EnlistIntelUser(ctx.author.id)
+        if (bSuccess):
+            await ctx.send(f'@{ctx.author.name} welcome to the intelligence program! You\'ll now earn intel points as you watch the stream, use !intel to track your points')
+        else:
             await ctx.send(f'@{ctx.author.name} we were unable to enlist you, it\'s likely you have already enlisted in the intelligence program')
+        #IntelData = IntelUser(datatuple=await SQL.GetIntelUser(ctx.author.id))
+        #bSuccessfullyEnlisted = False
+        #if (IntelData.id == 0):
+        #    bIsNewlyEnlisted = False
+        #    for newlyEnlisted in self.Enlisted_Users:
+        #        match = None
+        #        matchList = [user for user in newlyEnlisted if ctx.author.id == user.id]
+        #        if len(matchList) > 0: match = matchList[0]
+        #        if(match is not None): bIsNewlyEnlisted = True
+        #    if not bIsNewlyEnlisted:
+        #        TargetIndex = self.currentIntelGroupIndex-1 if self.currentIntelGroupIndex-1 >=0 else self.IntelGroupMax-1
+        #        newuser = IntelUser(ctx.author.id, 100)
+        #        self.Enlisted_Users.append(newuser)
+        #        self.Intel_Users[TargetIndex].append(newuser)
+        #        bSuccessfullyEnlisted = True
+        #        await ctx.send(f'@{ctx.author.name} welcome to the intelligence program! You\'ll now earn intel points as you watch the stream, use !intel to track your points')
+        #if not bSuccessfullyEnlisted:
+        #    await ctx.send(f'@{ctx.author.name} we were unable to enlist you, it\'s likely you have already enlisted in the intelligence program')
                         
 
     #@commands.command(name='deactivate')
@@ -500,70 +513,75 @@ class ManiacalBot(commands.Bot):
 
     @commands.command(name='intel')
     async def IntelCommand(self, ctx):
-        IntelUserData = None
-        try:
-            for group in self.Intel_Users:
-                match = None
-                matchList = [user for user in group if user.id == ctx.author.id]
-                if len(matchList) > 0: match = matchList[0]
-                if(match is not None): IntelUserData = match
-        except:
-            pass
-        if (IntelUserData is not None):
-            await ctx.send(f'@{ctx.author.name} you have {IntelUserData.points} intel')
+        points = await self.IntelMan.IntelCommand(ctx.author.id)
+        if (points != -1):
+            await ctx.send(f'@{ctx.author.name} you have {points} intel')
         else:
-            User = IntelUser(datatuple=await SQL.GetIntelUser(ctx.author.id))
-            if(User is not None):
-                await self.ActivateIntelUser(User)
-                await ctx.send(f'@{ctx.author.name} you have {User.points} intel')
-            else:
-                await ctx.send(f'@{ctx.author.name} you have not enlisted in our intelligence program, use !enlist to enlist now')
+            await ctx.send(f'@{ctx.author.name} you have not enlisted in our intelligence program, use !enlist to enlist now')
+        #IntelUserData = None
+        #try:
+        #    for group in self.Intel_Users:
+        #        match = None
+        #        matchList = [user for user in group if user.id == ctx.author.id]
+        #        if len(matchList) > 0: match = matchList[0]
+        #        if(match is not None): IntelUserData = match
+        #except:
+        #    pass
+        #if (IntelUserData is not None):
+        #    await ctx.send(f'@{ctx.author.name} you have {IntelUserData.points} intel')
+        #else:
+        #    User = IntelUser(datatuple=await SQL.GetIntelUser(ctx.author.id))
+        #    if(User is not None):
+        #        await self.ActivateIntelUser(User)
+        #        await ctx.send(f'@{ctx.author.name} you have {User.points} intel')
+        #    else:
+        #        await ctx.send(f'@{ctx.author.name} you have not enlisted in our intelligence program, use !enlist to enlist now')
 
 
-    async def ActivateIntelUser(self, user:IntelUser):
-        if (user is not None):
-            if(not await self.IntelUserActivated(user.id)):
-                TargetIndex = self.currentIntelGroupIndex-1 if self.currentIntelGroupIndex-1 >=0 else self.IntelGroupMax-1
-                self.Intel_Users[TargetIndex].append(user)
+    #async def ActivateIntelUser(self, user:IntelUser):
+    #    if (user is not None):
+    #        if(not await self.IntelUserActivated(user.id)):
+    #            TargetIndex = self.currentIntelGroupIndex-1 if self.currentIntelGroupIndex-1 >=0 else self.IntelGroupMax-1
+    #            self.Intel_Users[TargetIndex].append(user)
 
-    async def DeactivateIntelUser(self, id:int):
-        if(await self.IntelUserActivated(id=id)):
-            for group in self.Intel_Users:
-                match = None
-                matchList = [user for user in group if user.id == id]
-                if len(matchList) > 0: 
-                    match = matchList[0]
-                    if(match is not None):
-                        await SQL.UpdateIntelUsers(userdata=[match])
-                        group.remove(match)
+    #async def DeactivateIntelUser(self, id:int):
+    #    if(await self.IntelUserActivated(id=id)):
+    #        for group in self.Intel_Users:
+    #            match = None
+    #            matchList = [user for user in group if user.id == id]
+    #            if len(matchList) > 0: 
+    #                match = matchList[0]
+    #                if(match is not None):
+    #                    await SQL.UpdateIntelUsers(userdata=[match])
+    #                    group.remove(match)
 
-    async def IntelUserActivated(self, id:int):
-        try:
-            for group in self.Intel_Users:
-                match = None
-                matchList = [user for user in group if id == user.id]
-                if len(matchList) > 0: match = matchList[0]
-                if(match is not None): return True
-        except:
-            pass
-        else: return False
+    #async def IntelUserActivated(self, id:int):
+    #    try:
+    #        for group in self.Intel_Users:
+    #            match = None
+    #            matchList = [user for user in group if id == user.id]
+    #            if len(matchList) > 0: match = matchList[0]
+    #            if(match is not None): return True
+    #    except:
+    #        pass
+    #    else: return False
 
-    async def AwardIntel(self):
-        while True:
-            for user in self.Intel_Users[self.currentIntelGroupIndex]:
-                user.points +=5
-            self.currentIntelGroupIndex += 1
-            if self.currentIntelGroupIndex > self.IntelGroupMax-1: self.currentIntelGroupIndex = 0
-            await asyncio.sleep(self.IntelTimer)
+    #async def AwardIntel(self):
+    #    while True:
+    #        for user in self.Intel_Users[self.currentIntelGroupIndex]:
+    #            user.points +=5
+    #        self.currentIntelGroupIndex += 1
+    #        if self.currentIntelGroupIndex > self.IntelGroupMax-1: self.currentIntelGroupIndex = 0
+    #        await asyncio.sleep(self.IntelTimer)
     
 
-    async def IntelSQLUpdate(self):
-        flat_intel_list = []
-        for group in self.Intel_Users:
-            for user in group:
-                flat_intel_list.append(user)
+    #async def IntelSQLUpdate(self):
+    #    flat_intel_list = []
+    #    for group in self.Intel_Users:
+    #        for user in group:
+    #            flat_intel_list.append(user)
         
-        await SQL.UpdateIntelUsers(userdata=flat_intel_list)
+    #    await SQL.UpdateIntelUsers(userdata=flat_intel_list)
 
 #StreamInfo
 #region StreamInfo

@@ -54,6 +54,13 @@
     </Compile>
     <Compile Include="ValheimGameData.py" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ManiacalBot\ManiacalBot.pyproj">
+      <Name>ManiacalBot</Name>
+      <Project>{d495d229-b516-48e1-8107-730c31668f08}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
        Visual Studio and specify your pre- and post-build commands in
