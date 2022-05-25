@@ -22,13 +22,16 @@ class RoR2GameData(GameInputBase.GameInputBase):
         self.IntelCosts = {
             "movingon" : 25,
             "nailbiter" : 50,
-            "nolife" : 25
+            "nolife" : 25,
+            "organize" : 50,
+            "ambush": 10
             }
         self.socketKeywords = {
             "whiteitem" : self.JSONlamfactory("spawnwhite"),
             "greenitem" : self.JSONlamfactory("spawngreen"),
             "reditem" : self.JSONlamfactory("spawnred"),
             "blueitem" : self.JSONlamfactory("spawnlunar"),
+            "pinkitem" : self.JSONlamfactory("spawnvoid"),
             "anyitem" : self.JSONlamfactory("spawnany"),
             "equipment" : self.JSONlamfactory("spawnequip"),
             "yoink" : self.JSONlamfactory("removeitem"),
@@ -41,15 +44,18 @@ class RoR2GameData(GameInputBase.GameInputBase):
             "heal" : self.JSONlamfactory("heal"),
             "movingon" : IntelManager.IntelCostFunction(self.IntelCosts["movingon"], DelayCost = True)(self.JSONlamfactory("nextstage")),
             "nailbiter" : IntelManager.IntelCostFunction(self.IntelCosts["nailbiter"], DelayCost = True)(self.JSONlamfactory("OneHP")),
-            "nolife" : IntelManager.IntelCostFunction(self.IntelCosts["nolife"], DelayCost=True)(self.JSONlamfactory("HideHP"))
+            "organize" : IntelManager.IntelCostFunction(self.IntelCosts["organize"], DelayCost = True)(self.JSONlamfactory("OrderInventory")),
+            "nolife" : IntelManager.IntelCostFunction(self.IntelCosts["nolife"], DelayCost=True)(self.JSONlamfactory("HideHP")),
+            "ambush" : IntelManager.IntelCostFunction(self.IntelCosts["ambush"], DelayCost=True)(self.JSONlamfactory("Ambush"))
             #,"test" : self.JSONlamfactory("testcommand")
             }
         self.testKeywords = {
             "test" : self.JSONlamfactory("testcommand"),#(lambda username, id, Callid = -1: self.WriteAndSendJSON(username = username, id = id, Callid = Callid, function = "testcommand")),
             "inteltest" : IntelManager.IntelCostFunction(0, DelayCost = True)(self.JSONlamfactory("testcommand"))#(lambda username, id, Callid = -1: self.WriteAndSendJSON(username = username, id = id, Callid = Callid, function = "testcommand")))
             }
-        self.mysock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.mysock.connect((HOST, PORT))
+        self.mysock = socket.create_connection((HOST,PORT)) #(socket.AF_INET, socket.SOCK_STREAM, proto = 0)
+        #self.mysock.connect((HOST, PORT))
+        #self.mysock.
         loop = asyncio.get_event_loop()
         loop.create_task(self.SocketResponseTask())
     
@@ -96,11 +102,13 @@ class RoR2GameData(GameInputBase.GameInputBase):
         loop.create_task(self.SendJSON(JSONToSend))
     
     async def SendJSON(self, jsonobj):
+        print(jsonobj)
         encodedmsg = jsonobj.encode()
         msgSize = len(encodedmsg)
         print('\tPacket Size: ' + str(msgSize))
         self.mysock.sendall(msgSize.to_bytes(1, 'big'))
         self.mysock.sendall(encodedmsg)
+        print(encodedmsg)
         size = self.mysock.recv(2)
         data = self.mysock.recv(int(size))
         print('Received', str(data, 'utf-8'))
