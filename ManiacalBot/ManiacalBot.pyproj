@@ -5,14 +5,12 @@
     <ProjectGuid>d495d229-b516-48e1-8107-730c31668f08</ProjectGuid>
     <ProjectHome>.</ProjectHome>
     <StartupFile>ManiacalBot.py</StartupFile>
-    <SearchPath>
-    </SearchPath>
+    <SearchPath>..\TwitchPlaysCode\TwitchChatIntegration</SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <Name>ManiacalBot</Name>
     <RootNamespace>ManiacalBot</RootNamespace>
-    <InterpreterId>
-    </InterpreterId>
+    <InterpreterId>Global|PythonCore|3.9</InterpreterId>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -40,6 +38,9 @@
       <Project>{2f024525-6cc3-447b-a846-f4ca9dc80874}</Project>
       <Private>True</Private>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <InterpreterReference Include="Global|PythonCore|3.9" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

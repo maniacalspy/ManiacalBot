@@ -1,7 +1,10 @@
 #!/usr/bin/env pipenv run python
 import sys, os, importlib
 import asyncio
-from twitchio.ext  import commands
+import twitchio
+from twitchio import Client, Chatter
+from twitchio.chatter import WhisperChatter
+from twitchio.ext import commands
 #https://twitchio.readthedocs.io/en/latest/
 
 import random
@@ -23,8 +26,6 @@ sys.path.insert(0, 'C:/Users/Nolan/Desktop/ManiacalBot/TwitchPlaysCode/TwitchCha
 import ChatControlHandler
 from PollManager import PollManager
 
-ChannelInfo = namedtuple('ChannelInfo', ('broadcaster_language', 'broadcaster_login', 'display_name', 'game_id', 'game_name', 'id', 'is_live', 'tag_ids', 'thumbnail_url', 'title', 'started_at'))
-
 import time
 import threading
 
@@ -33,7 +34,7 @@ from functools import wraps
 #This next block of code was taken from https://gist.github.com/gregburek/1441055 and is not owned by me
 def rate_limited(seconds_to_wait, mode='wait', delay_first_call=False):
     """
-    Decorator that make functions not be called faster than
+    Decorator that make functions not be called faster than given rates
 
     set mode to 'kill' to just ignore requests that are faster than the 
     rate.
@@ -124,13 +125,10 @@ GameInputData = None
 
 class ManiacalBot(commands.Bot):
     
+    myChannel = None
+    streamUser = None
     PollMan = None
     ChatHandler = None
-    #Intel_Users = [[],[],[],[],[]]
-    #currentIntelGroupIndex = 0
-    #IntelGroupMax = 5
-    #IntelTimer = 60
-    #Enlisted_Users = []
     chat_data = {}
     tempcommands = {}
     countcommands = {}
@@ -160,7 +158,7 @@ class ManiacalBot(commands.Bot):
     def __init__(self):
         self.IntelMan = IntelManager()
         super().__init__(
-            irc_token=os.environ['TMI_TOKEN'],
+            token=os.environ['TMI_TOKEN'],
             api_token=os.environ['API_TOKEN'],
             client_id=os.environ['CLIENT_ID'], 
             client_secret = os.environ['SECRET'], 
@@ -169,35 +167,32 @@ class ManiacalBot(commands.Bot):
             initial_channels=[os.environ['CHANNEL']]
             )
 
+
     async def event_ready(self):
+        self.myChannel = self.connected_channels[0]
+        self.streamUser = await self.myChannel.user()
         await self.LoadAddedCommands()
-        data = await self.get_channels_by_name(self.initial_channels)
-        for channel in data:
-            """print(channel.keys())    for when they change the twitch API on me
-            print(channel.values())"""
-            self.channeldata[channel['broadcaster_login']] = ChannelInfo(*channel.values())
-        ws = self._ws
         asyncio.ensure_future(self.IntelMan.AwardIntel())
         asyncio.ensure_future(self.PeriodicMessages())
-
-        await ws.send_privmsg(os.environ['CHANNEL'], f"/me BOT ONLINE")
+        await self.myChannel.send(f"/me BOT ONLINE")
 
     async def PeriodicMessages(self):
         while True:
             choice = random.randint(0,len(self.periodicMessages)-1)
             Message = self.periodicMessages[choice]
-            await self._ws.send_privmsg(os.environ['CHANNEL'], Message)
+            await self.myChannel.send(Message)
             await asyncio.sleep(self.messageTimer)
 
     async def event_message(self, ctx):
+        if (ctx.echo or isinstance(ctx.author, WhisperChatter)):
+            return
         if ctx.author.name.lower() == os.environ['BOT_NICK'].lower() or ctx.author.name.lower() == ctx.channel.name.lower():
             if ctx.content == "STOP":
-                await bot._ws.send_privmsg(os.environ['CHANNEL'], '/me BOT SHUTTING DOWN')
+                await self.myChannel.send('/me BOT SHUTTING DOWN')
                 await self.SaveTempCommands()
                 await self.SaveCountCommands()
                 await self.IntelMan.IntelSQLUpdate()
                 SQL.Teardown()
-                #bot._ws.teardown()
                 sys.exit()
                 return
             elif ctx.content == "wipe":
@@ -207,15 +202,14 @@ class ManiacalBot(commands.Bot):
         if self.ChatHandler is not None: await self.ChatHandler.HandleIntegration(ctx)
 
         if self.PollMan is not None and ctx.content.isnumeric(): await self.PollMan.HandleVote(ctx)
-
-        await self.handle_commands(ctx)
         
+        await self.handle_commands(ctx)
 
-    async def event_join(self, user):
-        print(f'join: {user.name}')
+    async def event_join(self, channel, chatter):
+        print(f'join: {chatter.name}')
         try:
-            UserData = (await self.http.get_users(user.name))[0]
-            IntelData = IntelUser(datatuple=await SQL.GetIntelUser(UserData['id']))
+            UserData = await chatter.user()
+            IntelData = IntelUser(datatuple=await SQL.GetIntelUser(UserData.id))
             if (not IntelData.id == 0): await self.IntelMan.ActivateIntelUser(user=IntelData)
         except Exception as e:
             print(e)
@@ -246,7 +240,7 @@ class ManiacalBot(commands.Bot):
         try:
             output = self.countcommands[ctx.command.name].GetCommandText()
         finally:
-            if (output is not 'didntwork' and output is not None):
+            if (output != 'didntwork' and output != None):
                 await ctx.send(f'{output}')
                 
     
@@ -275,7 +269,7 @@ class ManiacalBot(commands.Bot):
     async def HandleChatPollResults(self, channel):
         if self.PollMan is not None:
             pollresult =  await self.PollMan.GetResults()
-            await self._ws.send_privmsg(channel.name, f"The poll has finished! The winning option was: {pollresult}")
+            await self.myChannel.send(f"The poll has finished! The winning option was: {pollresult}")
             del self.PollMan
 
     @commands.command(name="keywords", aliases = {'Keywords'})
@@ -447,10 +441,11 @@ class ManiacalBot(commands.Bot):
     @commands.command(name='SQLFollow')
     async def UpdateSQLFollows(self, ctx):
         if ctx.author.is_mod:
-            stream = self.channeldata[ctx.channel.name]
-            followers = await self.get_followers(stream.id)
-            for follower in followers:
-                Data = SQL.FollowData(id = follower['from_id'], name=follower['from_name'], followDate = parser.isoparse(follower['followed_at']))
+            followEvents = await self.streamUser.fetch_followers(os.environ['API_TOKEN'])
+            for followEvent in followEvents:
+                print(followEvent)
+                follower = followEvent.from_user
+                Data = SQL.FollowData(id = follower.id, name=follower.name, followDate = followEvent.followed_at)
                 SQL.AddFollowEntry(Data)
 
 
@@ -487,120 +482,34 @@ class ManiacalBot(commands.Bot):
             await ctx.send(f'@{ctx.author.name} welcome to the intelligence program! You\'ll now earn intel points as you watch the stream, use !intel to track your points')
         else:
             await ctx.send(f'@{ctx.author.name} we were unable to enlist you, it\'s likely you have already enlisted in the intelligence program')
-        #IntelData = IntelUser(datatuple=await SQL.GetIntelUser(ctx.author.id))
-        #bSuccessfullyEnlisted = False
-        #if (IntelData.id == 0):
-        #    bIsNewlyEnlisted = False
-        #    for newlyEnlisted in self.Enlisted_Users:
-        #        match = None
-        #        matchList = [user for user in newlyEnlisted if ctx.author.id == user.id]
-        #        if len(matchList) > 0: match = matchList[0]
-        #        if(match is not None): bIsNewlyEnlisted = True
-        #    if not bIsNewlyEnlisted:
-        #        TargetIndex = self.currentIntelGroupIndex-1 if self.currentIntelGroupIndex-1 >=0 else self.IntelGroupMax-1
-        #        newuser = IntelUser(ctx.author.id, 100)
-        #        self.Enlisted_Users.append(newuser)
-        #        self.Intel_Users[TargetIndex].append(newuser)
-        #        bSuccessfullyEnlisted = True
-        #        await ctx.send(f'@{ctx.author.name} welcome to the intelligence program! You\'ll now earn intel points as you watch the stream, use !intel to track your points')
-        #if not bSuccessfullyEnlisted:
-        #    await ctx.send(f'@{ctx.author.name} we were unable to enlist you, it\'s likely you have already enlisted in the intelligence program')
                         
-
-    #@commands.command(name='deactivate')
-    #async def DeactivateCommand(self, ctx):
-    #     await self.DeactivateIntelUser(ctx.author.id)
 
     @commands.command(name='intel')
     async def IntelCommand(self, ctx):
+        print('here')
         points = await self.IntelMan.IntelCommand(ctx.author.id)
         if (points != -1):
             await ctx.send(f'@{ctx.author.name} you have {points} intel')
         else:
             await ctx.send(f'@{ctx.author.name} you have not enlisted in our intelligence program, use !enlist to enlist now')
-        #IntelUserData = None
-        #try:
-        #    for group in self.Intel_Users:
-        #        match = None
-        #        matchList = [user for user in group if user.id == ctx.author.id]
-        #        if len(matchList) > 0: match = matchList[0]
-        #        if(match is not None): IntelUserData = match
-        #except:
-        #    pass
-        #if (IntelUserData is not None):
-        #    await ctx.send(f'@{ctx.author.name} you have {IntelUserData.points} intel')
-        #else:
-        #    User = IntelUser(datatuple=await SQL.GetIntelUser(ctx.author.id))
-        #    if(User is not None):
-        #        await self.ActivateIntelUser(User)
-        #        await ctx.send(f'@{ctx.author.name} you have {User.points} intel')
-        #    else:
-        #        await ctx.send(f'@{ctx.author.name} you have not enlisted in our intelligence program, use !enlist to enlist now')
 
-
-    #async def ActivateIntelUser(self, user:IntelUser):
-    #    if (user is not None):
-    #        if(not await self.IntelUserActivated(user.id)):
-    #            TargetIndex = self.currentIntelGroupIndex-1 if self.currentIntelGroupIndex-1 >=0 else self.IntelGroupMax-1
-    #            self.Intel_Users[TargetIndex].append(user)
-
-    #async def DeactivateIntelUser(self, id:int):
-    #    if(await self.IntelUserActivated(id=id)):
-    #        for group in self.Intel_Users:
-    #            match = None
-    #            matchList = [user for user in group if user.id == id]
-    #            if len(matchList) > 0: 
-    #                match = matchList[0]
-    #                if(match is not None):
-    #                    await SQL.UpdateIntelUsers(userdata=[match])
-    #                    group.remove(match)
-
-    #async def IntelUserActivated(self, id:int):
-    #    try:
-    #        for group in self.Intel_Users:
-    #            match = None
-    #            matchList = [user for user in group if id == user.id]
-    #            if len(matchList) > 0: match = matchList[0]
-    #            if(match is not None): return True
-    #    except:
-    #        pass
-    #    else: return False
-
-    #async def AwardIntel(self):
-    #    while True:
-    #        for user in self.Intel_Users[self.currentIntelGroupIndex]:
-    #            user.points +=5
-    #        self.currentIntelGroupIndex += 1
-    #        if self.currentIntelGroupIndex > self.IntelGroupMax-1: self.currentIntelGroupIndex = 0
-    #        await asyncio.sleep(self.IntelTimer)
-    
-
-    #async def IntelSQLUpdate(self):
-    #    flat_intel_list = []
-    #    for group in self.Intel_Users:
-    #        for user in group:
-    #            flat_intel_list.append(user)
-        
-    #    await SQL.UpdateIntelUsers(userdata=flat_intel_list)
 
 #StreamInfo
 #region StreamInfo
     @commands.command(name='game')
     async def GameCommand(self, ctx):
-        game_id = self.channeldata[ctx.channel.name].game_id
-        list = await ctx.channel._http.request('GET', '/games', params=[('id', game_id)])
-        gamedata = list.pop()
-        await ctx.send(f'{ctx.channel.name} is playing {gamedata["name"]}')
+        curChannel = await self.fetch_channel(ctx.channel.name)
+        await ctx.send(f'{ctx.channel.name} is playing {curChannel.game_name}')
 
     @commands.command(name='title')
     async def TitleCommand(self, ctx, *args):
         if(len(args) == 0):
-            await ctx.send(f'Current title: {self.channeldata[ctx.channel.name].title}')
+            curChannel = await self.fetch_channel(ctx.channel.name)
+            await ctx.send(f'Current title: {curChannel.title}')
         elif (ctx.author.is_mod):
             newtitle = ' '.join(args)
-            await self._ws._http.request('PATCH', '/channels', params=[('broadcaster_id', self.channeldata[ctx.channel.name].id)], headers = {'Content-Type': 'application/json'}, data='{"title": "' + newtitle + '"}')
-            channel = (await self.get_channels_by_name([ctx.channel.name])).pop()
-            self.channeldata[ctx.channel.name] = ChannelInfo(*channel.values())
+            await self.streamUser.modify_stream(token = os.environ['API_TOKEN'], title = newtitle)
+
 #endregion StreamInfo
 
 #endregion Commands
@@ -609,25 +518,20 @@ class ManiacalBot(commands.Bot):
         print(self.chat_data, flush=True)
         self.chat_data.clear()
 
-    async def get_channels_by_name(self, names, limit=None) -> str:
-        ws = self._ws
-        channels = []
-        for name in names:
-           data = await ws._http.request('GET', '/search/channels', params=[('query', name)], limit=1)
-           channels.append(data.pop(0))
-        return channels
-
 if __name__ == "__main__":
-    bot = ManiacalBot()
     try:
-        Game = sys.argv[1]
-    except:
-        Game = "NONE"
+        bot = ManiacalBot()
+        try:
+            Game = sys.argv[1]
+        except:
+            Game = "NONE"
     
     
-    if not (Game == "NONE"):
-        asyncio.run_coroutine_threadsafe(bot.EnableChatReading(Game), asyncio.get_event_loop())
+        if not (Game == "NONE"):
+            asyncio.run_coroutine_threadsafe(bot.EnableChatReading(Game), asyncio.get_event_loop())
 
 
-    SQL.Setup()
-    bot.run()
+        SQL.Setup()
+        bot.run()
+    except Exception as e:
+        print(e)

@@ -65,7 +65,8 @@ def Teardown():
 #region Follow
 def AddFollowEntry(Data: FollowData):
     global cursor, sql_connect
-    query = '''INSERT OR IGNORE INTO FollowData(id, name, followdate) VALUES(?,?,?);'''
+    query = '''INSERT INTO FollowData(id, name, followdate) VALUES(?,?,?)
+                ON CONFLICT(id) DO UPDATE SET name = excluded.name;'''
     try:
         cursor.execute(query, (Data.id, Data.name, Data.followDate.isoformat()))
         sql_connect.commit()        
