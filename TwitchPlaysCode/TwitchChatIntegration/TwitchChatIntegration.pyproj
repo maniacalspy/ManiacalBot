@@ -31,6 +31,9 @@
     <Compile Include="DolphinControlData.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="DRGGameData.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="GamecubeGameData.py" />
     <Compile Include="GameInputBase.py">
       <SubType>Code</SubType>

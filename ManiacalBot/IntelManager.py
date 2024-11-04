@@ -50,7 +50,7 @@ def IntelCostFunction(cost, DelayCost = False):
             id = kwargs['id']
             for group in IntelManager.Instance.Intel_Users:
                 match = None
-                matchList = [user for user in group if id == user.id]
+                matchList = [user for user in group if int(id) == user.id]
                 if len(matchList) > 0: match = matchList[0]
                 if(match is not None):
                     pending_spent = IntelManager.Instance.Pending_Costs.get(str(match.id),0)
@@ -100,6 +100,7 @@ class IntelManager(object):
                     if len(matchList) > 0: match = matchList[0]
                     if(match is not None): IntelUserData = match
             except:
+                print("resolving an intel call resulted in an error")
                 pass
             if (IntelUserData is not None):
                 IntelUserData.points -= call.callCost
@@ -136,7 +137,7 @@ class IntelManager(object):
         try:
             for group in self.Intel_Users:
                 match = None
-                matchList = [user for user in group if user.id == id]
+                matchList = [user for user in group if user.id == int(id)]
                 if len(matchList) > 0: match = matchList[0]
                 if(match is not None): IntelUserData = match
         except:

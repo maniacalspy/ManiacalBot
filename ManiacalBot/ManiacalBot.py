@@ -8,6 +8,7 @@ from twitchio.ext import commands
 #https://twitchio.readthedocs.io/en/latest/
 
 import random
+from randfacts import get_fact
 from itertools import chain
 from collections import namedtuple
 from datetime import datetime, timedelta
@@ -151,8 +152,8 @@ class ManiacalBot(commands.Bot):
         #"If you see a karate man make sure to use the !karate command in chat!",
         #"When Spy gets a pokemon's type wrong remember to use the !type command in chat",
         #"Spy generally lets chat drive when he takes a break from the stream for a drink or the restroom, so if you want to cause chaos (or just want to call Wally) then stick around for that",
-        "Just informing you now that when Spy makes an awful joke he deserves the use of the !boo command",
-        "Spy is currently working out his own rewards point system, if you want to be a part of that then use the !enlist command, and to see how many points you have use the !intel command"
+        "Just informing you now that when Spy makes an awful joke he deserves the use of the !boo command"#,
+        #"Spy is currently working out his own rewards point system, if you want to be a part of that then use the !enlist command, and to see how many points you have use the !intel command"
         ]
     #endregion PeriodicMessages
     def __init__(self):
@@ -178,12 +179,17 @@ class ManiacalBot(commands.Bot):
 
     async def PeriodicMessages(self):
         while True:
-            choice = random.randint(0,len(self.periodicMessages)-1)
-            Message = self.periodicMessages[choice]
-            await self.myChannel.send(Message)
+            choice = random.randint(0,len(self.periodicMessages))
+            Message = ""
+            if(choice == len(self.periodicMessages)):
+                Message = f"Fun fact: {get_fact()} (facts brought to you by randfacts)"
+            else:
+                Message = self.periodicMessages[choice]
+            if(len(Message) > 0 and len(Message) <= 500):
+                await self.myChannel.send(Message)
             await asyncio.sleep(self.messageTimer)
 
-    async def event_message(self, ctx):
+    async def event_message(self, ctx: commands.Context):
         if (ctx.echo or isinstance(ctx.author, WhisperChatter)):
             return
         if ctx.author.name.lower() == os.environ['BOT_NICK'].lower() or ctx.author.name.lower() == ctx.channel.name.lower():
@@ -195,8 +201,6 @@ class ManiacalBot(commands.Bot):
                 SQL.Teardown()
                 sys.exit()
                 return
-            elif ctx.content == "wipe":
-                await ctx.channel.clear()
         
 
         if self.ChatHandler is not None: await self.ChatHandler.HandleIntegration(ctx)
@@ -216,8 +220,7 @@ class ManiacalBot(commands.Bot):
 
     async def event_part(self, user):
         print(f'part: {user.name}')
-        UserData = (await self.http.get_users(user.name))[0]
-        await self.IntelMan.DeactivateIntelUser(int(UserData['id']))
+        await self.IntelMan.DeactivateIntelUser(user.id)
 
     async def EnableChatReading(self, title):
         if self.ChatHandler is None:
@@ -232,10 +235,10 @@ class ManiacalBot(commands.Bot):
 #Commands
 #region Commands
 
-    async def printTempCommand(self, ctx):
+    async def printTempCommand(self, ctx: commands.Context):
         await ctx.send(f'{self.tempcommands[ctx.command.name]}')
 
-    async def printCountCommand(self, ctx):
+    async def printCountCommand(self, ctx: commands.Context):
         output = 'didntwork'
         try:
             output = self.countcommands[ctx.command.name].GetCommandText()
@@ -245,7 +248,7 @@ class ManiacalBot(commands.Bot):
                 
     
     @commands.command(name = "poll")
-    async def pollCommand(self, ctx, *args):
+    async def pollCommand(self, ctx: commands.Context, *args):
         if(ctx.author.is_mod):
             if self.PollMan is None:
                 pollTime = int(args[0])
@@ -290,13 +293,13 @@ class ManiacalBot(commands.Bot):
                 currentMessage += keyword
             messages.append(currentMessage)
             for message in messages:
-                await ctx.send(message)
+                await ctx.reply(message)
 
 
 #AddedChatCommands
 #region AddedChatCommands
     @commands.command(name="addcom")
-    async def AddTempCommand(self, ctx, *args):
+    async def AddTempCommand(self, ctx: commands.Context, *args):
         if(ctx.author.is_mod):
             commandName = args[0]
             commandText = ' '.join(args[1:])
@@ -304,37 +307,37 @@ class ManiacalBot(commands.Bot):
                 if(commandName in self.deletedCommands): self.deletedCommands.discard(commandName)
                 self.tempcommands[commandName] = commandText
                 self.add_command(commands.Command(commandName, self.printTempCommand))
-                await ctx.send(f'command "{commandName}" added successfully')
-            else: await ctx.send(f'command {commandName} already exists. Try using !editcom instead')
+                await ctx.reply(f'command "{commandName}" added successfully')
+            else: await ctx.reply(f'command {commandName} already exists. Try using !editcom instead')
 
 
     @commands.command(name="editcom")
-    async def EditTempCommand(self, ctx, *args):
+    async def EditTempCommand(self, ctx: commands.Context, *args):
         if(ctx.author.is_mod):
             commandName = args[0]
             commandText = ' '.join(args[1:])
             if(commandName in self.tempcommands):
                 self.tempcommands[commandName] = commandText
-                await ctx.send(f'command "{commandName}" updated!')
+                await ctx.reply(f'command "{commandName}" updated!')
             elif commandName:
-                await ctx.send(f'command "{commandName}" does not exist, use !addcom to add it')
+                await ctx.reply(f'command "{commandName}" does not exist, use !addcom to add it')
 
     
     @commands.command(name="delcom")
-    async def DeleteTempCommand(self, ctx, *args):
+    async def DeleteTempCommand(self, ctx: commands.Context, *args):
         if(ctx.author.is_mod):
             commandName = args[0]
             if(commandName in self.tempcommands):
                 self.deletedCommands.add(commandName)
                 del self.tempcommands[commandName]
                 self.remove_command(self.commands[commandName])
-                await ctx.send(f'command "{commandName}" deleted successfully')
+                await ctx.reply(f'command "{commandName}" deleted successfully')
             elif (commandName in self.countcommands):
                 self.delcounters.add(commandName)
                 del self.countcommands[commandName]
-                self.remove_command(self.commands[commandname])
-                await ctx.send(f'command "{commandName}" deleted successfully')
-            else: await ctx.send(f'command "{commandName}" does not exist.')
+                self.remove_command(self.commands[commandName])
+                await ctx.reply(f'command "{commandName}" deleted successfully')
+            else: await ctx.reply(f'command "{commandName}" does not exist.')
 
     async def SaveTempCommands(self):
         for commandItem in self.deletedCommands:
@@ -365,81 +368,80 @@ class ManiacalBot(commands.Bot):
                 self.add_command(commands.Command(commandName, self.printCountCommand))
 
     @commands.command(name="addcounter")
-    async def AddCountCommad(self, ctx, *args):
+    async def AddCountCommad(self, ctx: commands.Context, *args):
         if(ctx.author.is_mod):
             commandName = args[0]
             commandText = ' '.join(args[1:])
             if(commandName not in self.countcommands):
                 self.countcommands[commandName] = CountingCommand(name = commandName, text = commandText)
                 self.add_command(commands.Command(commandName, self.printCountCommand))
-                await ctx.send(f'command "{commandName}" added successfully')
-            else: await ctx.send(f'command {commandName} already exists. Try using !editcom instead')
+                await ctx.reply(f'command "{commandName}" added successfully')
+            else: await ctx.reply(f'command {commandName} already exists. Try using !editcom instead')
 
 #endregion AddedChatCommands
 
 #TwitchPlaysCommands
 #region TwitchPlaysCommands
     @commands.command(name='StartReader', aliases = {'startreader', 'read'})
-    async def StartReaderCommand(self, ctx, *args):
+    async def StartReaderCommand(self, ctx: commands.Context, *args):
         if(ctx.author.name == ctx.channel.name):
             await self.EnableChatReading(args[0])
             await ctx.send(f"/me CHAT INTEGRATION HAS STARTED")
         
     
     @commands.command(name='StopReader', aliases = {'stopreader', 'stopread'})
-    async def StopReaderCommand(self, ctx):
+    async def StopReaderCommand(self, ctx: commands.Context):
         if(ctx.author.name == ctx.channel.name):
             await self.DisableChatReading()
             await ctx.send( f"/me CHAT INTEGRATION HAS FINISHED")
 #endregion TwitchPlaysCommands        
 
     @commands.command(name='suggestion')
-    async def AddSuggestionCommand(self, ctx, *args):
+    async def AddSuggestionCommand(self, ctx: commands.Context, *args):
         stream = self.channeldata[ctx.channel.name]
         followdata = await self.get_follow(ctx.author.id, stream.id)
         if(followdata != None or ctx.author.name == ctx.channel.name):
             suggestion = ' '.join(args)
             SQL.AddSuggestionEntry(suggestion)
-            await ctx.send(f'@{ctx.author.name}, your suggestion was added successfully')
+            await ctx.reply(f'Your suggestion was added successfully')
 
     @commands.command(name='dontdothis')
-    async def TimeoutCommand(self, ctx):
+    async def TimeoutCommand(self, ctx: commands.Context):
         await ctx.timeout(user = ctx.author, duration = 6000, reason = 'Did the bad command')
-        await ctx.send_me(f'{ctx.author.name} has tempted the fates, and now must learn their lesson')
+        await ctx.send(f'/me {ctx.author.name} has tempted the fates, and now must learn their lesson')
 
     @commands.command(name='follow')
-    async def UsersCommand(self, ctx):
+    async def UsersCommand(self, ctx: commands.Context):
         stream = self.channeldata[ctx.channel.name]
         followdata = await self.get_follow(ctx.author.id, stream.id)
         if(followdata != None):
             followdate = parser.isoparse(followdata['followed_at'])
             date = datetime.now(pytz.utc)
             followlength = relativedelta(date, followdate)
-            await ctx.send(f'{ctx.author.name} has been following for {followlength.years} year(s), {followlength.months} month(s), {followlength.days} day(s), {followlength.hours} hour(s), {followlength.minutes} minute(s), and {followlength.seconds} second(s)')
+            await ctx.reply(f'{ctx.author.name} has been following for {followlength.years} year(s), {followlength.months} month(s), {followlength.days} day(s), {followlength.hours} hour(s), {followlength.minutes} minute(s), and {followlength.seconds} second(s)')
 #Quotes
 #region Quotes
     @commands.command(name='addquote')
-    async def AddQuoteCommand(self, ctx, *args):
-        if(ctx.author.is_mod):
-            quote = ' '.join(args)
-            SQL.AddQuoteEntry(quote)
-            await ctx.send(f'{ctx.author.name}, quote "{quote}" added succesfully')
+    async def AddQuoteCommand(self, ctx: commands.Context, *args):
+        quote = ' '.join(args)
+        SQL.AddQuoteEntry(quote)
+        await ctx.reply(f'Quote "{quote}" added succesfully')
 
-    @commands.command(name ='quote')
-    async def GetQuoteCommand(self, ctx, *args):
+    @commands.command(name ='quote', aliases={'Quote'})
+    async def GetQuoteCommand(self, ctx: commands.Context, *args):
         try:
             id = args[0]
             quote = await SQL.GetQuote(id)
         except IndexError:
             quote = await SQL.GetQuote()
         if (quote is not None):
-            await ctx.send(f'"{quote.text}" (quote #{quote.id})');
+            await ctx.reply(f'"{quote.text}" (quote #{quote.id})');
         elif (id is not None):
-            await ctx.send(f'Quote with id #{id} not found')
+            await ctx.reply(f'Quote with id #{id} not found')
 #endregion Quotes
 
     @commands.command(name='SQLFollow')
-    async def UpdateSQLFollows(self, ctx):
+    async def UpdateSQLFollows(self, ctx: commands.Context):
         if ctx.author.is_mod:
             followEvents = await self.streamUser.fetch_followers(os.environ['API_TOKEN'])
             for followEvent in followEvents:
@@ -454,55 +456,57 @@ class ManiacalBot(commands.Bot):
         self.Enlisted_Users = []
 
     @commands.command(name='SQLIntel')
-    async def ForceSQLUpdate(self, ctx):
+    async def ForceSQLUpdate(self, ctx: commands.Context):
         if ctx.author.is_mod:
             await self.IntelMan.IntelSQLUpdate()
 
     @commands.command(name='agents')
-    async def PrintAgents(self, ctx):
+    async def PrintAgents(self, ctx: commands.Context):
         print(self.IntelMan.Intel_Users)
     
 
     @commands.command(name='remindme')
-    async def RemindMeCommand(self, ctx, *args):
+    async def RemindMeCommand(self, ctx: commands.Context, *args):
         if ctx.author.is_mod:
             try:
                 timer = int(args[0])
                 remindermessage = ' '.join(args[1:])
-                await ctx.send(f'{ctx.author.name} your reminder "{remindermessage}" has been set')
+                await ctx.reply(f'Your reminder "{remindermessage}" has been set')
                 await asyncio.sleep(timer)
-                await ctx.send(f'{ctx.author.name} here is your reminder for: {remindermessage}')
+                await ctx.reply(f'Here is your reminder for: {remindermessage}')
             except Exception as e:
                 print(e)
 
     @commands.command(name='enlist', aliases = {'Enlist'})
-    async def EnlistIntelUserCmd(self, ctx):
+    async def EnlistIntelUserCmd(self, ctx: commands.Context):
         bSuccess = await self.IntelMan.EnlistIntelUser(ctx.author.id)
         if (bSuccess):
-            await ctx.send(f'@{ctx.author.name} welcome to the intelligence program! You\'ll now earn intel points as you watch the stream, use !intel to track your points')
+            await ctx.reply(f'Welcome to the intelligence program! You\'ll now earn intel points as you watch the stream, use !intel to track your points')
         else:
-            await ctx.send(f'@{ctx.author.name} we were unable to enlist you, it\'s likely you have already enlisted in the intelligence program')
+            await ctx.reply(f'We were unable to enlist you, it\'s likely you have already enlisted in the intelligence program')
                         
 
     @commands.command(name='intel')
-    async def IntelCommand(self, ctx):
-        print('here')
+    async def IntelCommand(self, ctx: commands.Context):
         points = await self.IntelMan.IntelCommand(ctx.author.id)
         if (points != -1):
             await ctx.send(f'@{ctx.author.name} you have {points} intel')
         else:
             await ctx.send(f'@{ctx.author.name} you have not enlisted in our intelligence program, use !enlist to enlist now')
 
-
+    @commands.command(name = 'fact')
+    async def FactCommand(self, ctx: commands.Context):
+        FactMessage = get_fact()
+        await ctx.reply(FactMessage)
 #StreamInfo
 #region StreamInfo
     @commands.command(name='game')
-    async def GameCommand(self, ctx):
+    async def GameCommand(self, ctx: commands.Context):
         curChannel = await self.fetch_channel(ctx.channel.name)
         await ctx.send(f'{ctx.channel.name} is playing {curChannel.game_name}')
 
     @commands.command(name='title')
-    async def TitleCommand(self, ctx, *args):
+    async def TitleCommand(self, ctx: commands.Context, *args):
         if(len(args) == 0):
             curChannel = await self.fetch_channel(ctx.channel.name)
             await ctx.send(f'Current title: {curChannel.title}')
