@@ -22,7 +22,7 @@ from IntelManager import IntelManager
 import MBSQLModule as SQL
 
 #THIS IS FOR THE TTYD GAME INTEGRATION, IT ADDS THE FOLLOWING FOLDER TO THE PATH FOR IMPORTING FILES
-sys.path.insert(0, 'C:/Users/Nolan/Desktop/ManiacalBot/TwitchPlaysCode/TwitchChatIntegration')
+sys.path.insert(0, os.environ['SEARCH_PATH_INSERT'])
 
 import ChatControlHandler
 from PollManager import PollManager
@@ -152,9 +152,9 @@ class ManiacalBot(commands.Bot):
         #"If you see a karate man make sure to use the !karate command in chat!",
         #"When Spy gets a pokemon's type wrong remember to use the !type command in chat",
         #"Spy generally lets chat drive when he takes a break from the stream for a drink or the restroom, so if you want to cause chaos (or just want to call Wally) then stick around for that",
-        "Just informing you now that when Spy makes an awful joke he deserves the use of the !boo command"#,
+        "Just informing you now that when Spy makes an awful joke he deserves the use of the !boo command",
         #"Spy is currently working out his own rewards point system, if you want to be a part of that then use the !enlist command, and to see how many points you have use the !intel command"
-        ]
+        "If you didn't know, Spy is uploading all of his stream VODs to his Youtube channel to archive them, feel free to check them out here: https://www.youtube.com/ManiacalSpy"        ]
     #endregion PeriodicMessages
     def __init__(self):
         self.IntelMan = IntelManager()
@@ -179,7 +179,7 @@ class ManiacalBot(commands.Bot):
 
     async def PeriodicMessages(self):
         while True:
-            choice = random.randint(0,len(self.periodicMessages))
+            choice = random.randint(0,len(self.periodicMessages)-1)
             Message = ""
             if(choice == len(self.periodicMessages)):
                 Message = f"Fun fact: {get_fact()} (facts brought to you by randfacts)"
